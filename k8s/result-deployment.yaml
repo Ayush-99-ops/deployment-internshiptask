@@ -16,7 +16,8 @@ spec:
     spec:
       containers:
         - name: result
-          image: YOUR_DOCKERHUB_USERNAME/result:latest
+          image: result:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 4000
           env:
@@ -52,7 +53,7 @@ metadata:
   labels:
     app: result
 spec:
-  type: LoadBalancer
+  type: NodePort
   selector:
     app: result
   ports:

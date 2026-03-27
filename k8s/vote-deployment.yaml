@@ -16,7 +16,8 @@ spec:
     spec:
       containers:
         - name: vote
-          image: YOUR_DOCKERHUB_USERNAME/vote:latest
+          image: vote:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
           env:
@@ -49,7 +50,7 @@ metadata:
   labels:
     app: vote
 spec:
-  type: LoadBalancer
+  type: NodePort
   selector:
     app: vote
   ports:

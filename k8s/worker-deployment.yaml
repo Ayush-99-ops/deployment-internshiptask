@@ -16,7 +16,8 @@ spec:
     spec:
       containers:
         - name: worker
-          image: YOUR_DOCKERHUB_USERNAME/worker:latest
+          image: worker:latest
+          imagePullPolicy: Never
           env:
             - name: REDIS_HOST
               value: "redis"
