@@ -20,7 +20,9 @@ namespace Worker
                 var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
                     ?? throw new InvalidOperationException("DATABASE_URL environment variable is not set.");
 
-                var pgsql = OpenDbConnection(databaseUrl);
+                var connString = ConvertToNpgsqlString(databaseUrl);
+
+                var pgsql = OpenDbConnection(connString);
                 var redisConn = OpenRedisConnection(redisHost);
                 var redis = redisConn.GetDatabase();
 
@@ -47,7 +49,7 @@ namespace Worker
                         if (!pgsql.State.Equals(System.Data.ConnectionState.Open))
                         {
                             Console.WriteLine("Reconnecting to Neon DB");
-                            pgsql = OpenDbConnection(databaseUrl);
+                            pgsql = OpenDbConnection(connString);
                         }
                         else
                         {
@@ -65,6 +67,17 @@ namespace Worker
                 Console.Error.WriteLine(ex.ToString());
                 return 1;
             }
+        }
+
+        private static string ConvertToNpgsqlString(string url)
+        {
+            var uri = new Uri(url);
+            var userInfo = uri.UserInfo.Split(':');
+            var username = userInfo[0];
+            var password = userInfo[1];
+            var host = uri.Host;
+            var database = uri.AbsolutePath.TrimStart('/');
+            return $"Host={host};Username={username};Password={password};Database={database};SSL Mode=Require;Trust Server Certificate=true";
         }
 
         private static NpgsqlConnection OpenDbConnection(string connectionString)
