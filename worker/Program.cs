@@ -16,8 +16,15 @@ namespace Worker
         {
             try
             {
-                var pgsql = OpenDbConnection("Server=localhost;Username=postgres;Password=postgres;");
-                var redisConn = OpenRedisConnection("localhost");
+                var redisHost = Environment.GetEnvironmentVariable("REDIS_HOST") ?? "redis";
+
+                // Neon DB connection string from environment variable
+                // Format: postgresql://user:password@ep-xxxx.region.aws.neon.tech/dbname?sslmode=require
+                var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
+                    ?? throw new InvalidOperationException("DATABASE_URL environment variable is not set.");
+
+                var pgsql = OpenDbConnection(databaseUrl);
+                var redisConn = OpenRedisConnection(redisHost);
                 var redis = redisConn.GetDatabase();
 
                 // Keep alive is not implemented in Npgsql yet. This workaround was recommended:
@@ -34,7 +41,7 @@ namespace Worker
                     // Reconnect redis if down
                     if (redisConn == null || !redisConn.IsConnected) {
                         Console.WriteLine("Reconnecting Redis");
-                        redisConn = OpenRedisConnection("localhost");
+                        redisConn = OpenRedisConnection(redisHost);
                         redis = redisConn.GetDatabase();
                     }
                     string json = redis.ListLeftPopAsync("votes").Result;
@@ -45,8 +52,8 @@ namespace Worker
                         // Reconnect DB if down
                         if (!pgsql.State.Equals(System.Data.ConnectionState.Open))
                         {
-                            Console.WriteLine("Reconnecting DB");
-                            pgsql = OpenDbConnection("Server=localhost;Username=postgres;Password=postgres;");
+                            Console.WriteLine("Reconnecting to Neon DB");
+                            pgsql = OpenDbConnection(databaseUrl);
                         }
                         else
                         { // Normal +1 vote requested
@@ -74,23 +81,24 @@ namespace Worker
             {
                 try
                 {
+                    // NpgsqlConnection accepts postgresql:// URI format directly
                     connection = new NpgsqlConnection(connectionString);
                     connection.Open();
                     break;
                 }
                 catch (SocketException)
                 {
-                    Console.Error.WriteLine("Waiting for db");
+                    Console.Error.WriteLine("Waiting for Neon DB...");
                     Thread.Sleep(1000);
                 }
-                catch (DbException)
+                catch (DbException ex)
                 {
-                    Console.Error.WriteLine("Waiting for db");
+                    Console.Error.WriteLine($"Waiting for Neon DB: {ex.Message}");
                     Thread.Sleep(1000);
                 }
             }
 
-            Console.Error.WriteLine("Connected to db");
+            Console.Error.WriteLine("Connected to Neon DB");
 
             var command = connection.CreateCommand();
             command.CommandText = @"CREATE TABLE IF NOT EXISTS votes (

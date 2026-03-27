@@ -1,0 +1,4 @@
+# This file is intentionally left as a placeholder.
+# PostgreSQL is hosted externally on Neon DB (https://neon.tech).
+# No local PostgreSQL pod is deployed in Kubernetes.
+# The connection string is stored in k8s/postgres-secret.yaml as 'neondb-secret'.
