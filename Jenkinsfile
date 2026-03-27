@@ -2,33 +2,24 @@ pipeline {
     agent any
 
     environment {
-        // ─── Change these to your Docker Hub username and image names ───
-        DOCKER_HUB_USER = "YOUR_DOCKERHUB_USERNAME"
-        VOTE_IMAGE      = "${DOCKER_HUB_USER}/vote"
-        RESULT_IMAGE    = "${DOCKER_HUB_USER}/result"
-        WORKER_IMAGE    = "${DOCKER_HUB_USER}/worker"
-
-        // Jenkins credential ID for Docker Hub (username + password)
-        DOCKER_CREDENTIALS_ID = "dockerhub-credentials"
-
-        // AWS EC2 SSH credential ID (PEM key stored in Jenkins)
+        DOCKER_HUB_USER        = "YOUR_DOCKERHUB_USERNAME"
+        VOTE_IMAGE             = "${DOCKER_HUB_USER}/vote"
+        RESULT_IMAGE           = "${DOCKER_HUB_USER}/result"
+        WORKER_IMAGE           = "${DOCKER_HUB_USER}/worker"
+        DOCKER_CREDENTIALS_ID  = "dockerhub-credentials"
         EC2_SSH_CREDENTIALS_ID = "ec2-ssh-key"
-
-        // Public IP / hostname of your EC2 instance
-        EC2_HOST = "YOUR_EC2_PUBLIC_IP_OR_DNS"
-        EC2_USER = "ubuntu"
+        EC2_HOST               = "YOUR_EC2_PUBLIC_IP_OR_DNS"
+        EC2_USER               = "ubuntu"
     }
 
     stages {
 
-        // ── Stage 1: Checkout ─────────────────────────────────────────────
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        // ── Stage 2: Build Docker Images ──────────────────────────────────
         stage('Build Images') {
             parallel {
                 stage('Build Vote') {
@@ -58,7 +49,6 @@ pipeline {
             }
         }
 
-        // ── Stage 3: Push to Docker Hub ───────────────────────────────────
         stage('Push Images') {
             steps {
                 withCredentials([usernamePassword(
@@ -82,7 +72,6 @@ pipeline {
             }
         }
 
-        // ── Stage 4: Deploy to EC2 via kubectl ────────────────────────────
         stage('Deploy to Kubernetes') {
             steps {
                 withCredentials([sshUserPrivateKey(
@@ -95,15 +84,12 @@ pipeline {
                             scp -i $EC2_KEY -o StrictHostKeyChecking=no -r k8s/ ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/k8s/
 
                             ssh -i $EC2_KEY -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
-                                # Apply Neon DB secret and Redis (no postgres pod - using Neon DB)
                                 kubectl apply -f /home/${EC2_USER}/k8s/postgres-secret.yaml
                                 kubectl apply -f /home/${EC2_USER}/k8s/redis-deployment.yaml
 
-                                # Wait for Redis to be ready
                                 kubectl wait --for=condition=ready pod -l app=redis --timeout=60s
 
-                                # Update image tags to current build then apply
-                                sed -i "s|YOUR_DOCKERHUB_USERNAME/vote:latest|${VOTE_IMAGE}:${tag}|g"   /home/${EC2_USER}/k8s/vote-deployment.yaml
+                                sed -i "s|YOUR_DOCKERHUB_USERNAME/vote:latest|${VOTE_IMAGE}:${tag}|g"     /home/${EC2_USER}/k8s/vote-deployment.yaml
                                 sed -i "s|YOUR_DOCKERHUB_USERNAME/result:latest|${RESULT_IMAGE}:${tag}|g" /home/${EC2_USER}/k8s/result-deployment.yaml
                                 sed -i "s|YOUR_DOCKERHUB_USERNAME/worker:latest|${WORKER_IMAGE}:${tag}|g" /home/${EC2_USER}/k8s/worker-deployment.yaml
 
@@ -111,7 +97,6 @@ pipeline {
                                 kubectl apply -f /home/${EC2_USER}/k8s/result-deployment.yaml
                                 kubectl apply -f /home/${EC2_USER}/k8s/worker-deployment.yaml
 
-                                # Wait for rollout
                                 kubectl rollout status deployment/vote   --timeout=120s
                                 kubectl rollout status deployment/result --timeout=120s
                                 kubectl rollout status deployment/worker --timeout=120s
@@ -122,7 +107,6 @@ pipeline {
             }
         }
 
-        // ── Stage 5: Smoke Test ───────────────────────────────────────────
         stage('Smoke Test') {
             steps {
                 withCredentials([sshUserPrivateKey(
@@ -131,9 +115,7 @@ pipeline {
                 )]) {
                     sh """
                         ssh -i $EC2_KEY -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
-                            # Vote app should return HTTP 200
-                            curl -sf http://localhost:31000 -o /dev/null && echo "Vote app OK" || echo "Vote app FAILED"
-                            # Result app should return HTTP 200
+                            curl -sf http://localhost:31000 -o /dev/null && echo "Vote app OK"   || echo "Vote app FAILED"
                             curl -sf http://localhost:31001 -o /dev/null && echo "Result app OK" || echo "Result app FAILED"
                         '
                     """
@@ -144,7 +126,6 @@ pipeline {
 
     post {
         always {
-            // Clean up local Docker images to save disk space on Jenkins agent
             sh """
                 docker rmi ${VOTE_IMAGE}:${env.BUILD_NUMBER}   || true
                 docker rmi ${RESULT_IMAGE}:${env.BUILD_NUMBER} || true
@@ -152,10 +133,10 @@ pipeline {
             """
         }
         success {
-            echo "✅ Deployment successful! Build #${env.BUILD_NUMBER}"
+            echo "Deployment successful! Build #${env.BUILD_NUMBER}"
         }
         failure {
-            echo "❌ Pipeline failed. Check the logs above."
+            echo "Pipeline failed. Check the logs above."
         }
     }
 }

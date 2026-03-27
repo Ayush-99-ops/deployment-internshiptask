@@ -32,8 +32,3 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "500m"
-          livenessProbe:
-            exec:
-              command: ["sh", "-c", "pgrep -f Worker.dll"]
-            initialDelaySeconds: 30
-            periodSeconds: 10

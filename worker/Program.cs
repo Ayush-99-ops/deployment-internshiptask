@@ -17,9 +17,6 @@ namespace Worker
             try
             {
                 var redisHost = Environment.GetEnvironmentVariable("REDIS_HOST") ?? "redis";
-
-                // Neon DB connection string from environment variable
-                // Format: postgresql://user:password@ep-xxxx.region.aws.neon.tech/dbname?sslmode=require
                 var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
                     ?? throw new InvalidOperationException("DATABASE_URL environment variable is not set.");
 
@@ -27,36 +24,33 @@ namespace Worker
                 var redisConn = OpenRedisConnection(redisHost);
                 var redis = redisConn.GetDatabase();
 
-                // Keep alive is not implemented in Npgsql yet. This workaround was recommended:
-                // https://github.com/npgsql/npgsql/issues/1214#issuecomment-235828359
                 var keepAliveCommand = pgsql.CreateCommand();
                 keepAliveCommand.CommandText = "SELECT 1";
 
                 var definition = new { vote = "", voter_id = "" };
                 while (true)
                 {
-                    // Slow down to prevent CPU spike, only query each 100ms
                     Thread.Sleep(100);
 
-                    // Reconnect redis if down
-                    if (redisConn == null || !redisConn.IsConnected) {
+                    if (redisConn == null || !redisConn.IsConnected)
+                    {
                         Console.WriteLine("Reconnecting Redis");
                         redisConn = OpenRedisConnection(redisHost);
                         redis = redisConn.GetDatabase();
                     }
+
                     string json = redis.ListLeftPopAsync("votes").Result;
                     if (json != null)
                     {
                         var vote = JsonConvert.DeserializeAnonymousType(json, definition);
                         Console.WriteLine($"Processing vote for '{vote.vote}' by '{vote.voter_id}'");
-                        // Reconnect DB if down
                         if (!pgsql.State.Equals(System.Data.ConnectionState.Open))
                         {
                             Console.WriteLine("Reconnecting to Neon DB");
                             pgsql = OpenDbConnection(databaseUrl);
                         }
                         else
-                        { // Normal +1 vote requested
+                        {
                             UpdateVote(pgsql, vote.voter_id, vote.vote);
                         }
                     }
@@ -81,7 +75,6 @@ namespace Worker
             {
                 try
                 {
-                    // NpgsqlConnection accepts postgresql:// URI format directly
                     connection = new NpgsqlConnection(connectionString);
                     connection.Open();
                     break;
@@ -112,7 +105,6 @@ namespace Worker
 
         private static ConnectionMultiplexer OpenRedisConnection(string hostname)
         {
-            // Use IP address to workaround https://github.com/StackExchange/StackExchange.Redis/issues/410
             var ipAddress = GetIp(hostname);
             Console.WriteLine($"Found redis at {ipAddress}");
 

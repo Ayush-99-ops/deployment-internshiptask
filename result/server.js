@@ -17,12 +17,10 @@ io.on('connection', function (socket) {
   });
 });
 
-// Uses Neon DB connection string from DATABASE_URL env variable
-// SSL is required by Neon - enabled via ?sslmode=require in the URL
 var pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false  // Required for Neon DB
+    rejectUnauthorized: false
   }
 });
 
